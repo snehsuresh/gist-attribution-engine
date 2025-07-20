@@ -218,3 +218,6 @@ marimo/\_static/ marimo/\_lsp/ **marimo**/
 # Streamlit
 
 .streamlit/secrets.toml
+data/processed/duckdb/articles.duckdb
+data/raw/news/articles_enhanced.csv
+data/processed/.DS_Store
