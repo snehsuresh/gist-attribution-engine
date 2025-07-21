@@ -223,3 +223,5 @@ data/raw/news/articles_enhanced.csv
 data/processed/.DS_Store
 raw_articles.txt
 .DS_Store
+duckdb
+duckdb.zip
