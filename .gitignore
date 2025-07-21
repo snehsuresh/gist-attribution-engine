@@ -222,3 +222,4 @@ data/processed/duckdb/articles.duckdb
 data/raw/news/articles_enhanced.csv
 data/processed/.DS_Store
 raw_articles.txt
+.DS_Store
