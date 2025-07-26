@@ -18,6 +18,9 @@ Before running:
   2) Dump your metadata to metadata.pkl (a pandas DataFrame with columns
      ['chunk_id','article_id','chunk_text','title'] indexed 0…N-1)
 
+
+python fast_vector_search.py   --query "Your query"   --embeddings_path data/processed/embeddings/embeddings.npy   --metadata_path data/processed/embeddings/metadata.pkl   --top_k 5
+
 """
 
 import argparse

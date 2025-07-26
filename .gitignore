@@ -4,7 +4,7 @@ plan.txt
 # Byte-compiled / optimized / DLL files
 
 **pycache**/ _.py[codz] _$py.class
-
+__pycache__/
 # C extensions
 
 \*.so
