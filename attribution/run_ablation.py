@@ -17,7 +17,7 @@ from openai import OpenAI
 client = OpenAI()
 
 """
-python attribution/run_ablation.py   --query "Why is inflation rising?"   --embeddings_path data/processed/embeddings/embeddings.npy   --metadata_path data/processed/embeddings/metadata.pkl   --top_k 5
+python attribution/run_ablation.py   --query "Why did Elon Musk distance himself from Trump’s second administration?"   --embeddings_path data/processed/embeddings/embeddings.npy   --metadata_path data/processed/embeddings/metadata.pkl   --top_k 5   --filter_articles lewrockwell_2025-07-14_21,lewrockwell_2025-07-10_30,counterpunch_2025-06-04_36
 """
 
 
@@ -27,14 +27,21 @@ def convert(o):
         return float(o)
     return o
 
-def get_top_k_chunks(query, embeddings_path, metadata_path, top_k=5, use_gpu=False):
+def get_top_k_chunks(query, embeddings_path, metadata_path, top_k=5, use_gpu=False, filter_articles=None):
     """
     Retrieve the top-K most similar chunks for the given query.
+    Optionally filter by article_id.
     """
     emb_mat = np.load(embeddings_path)
     if emb_mat.dtype != np.float32:
         emb_mat = emb_mat.astype('float32')
+
     metadata = pd.read_pickle(metadata_path)
+
+    # Optional filtering
+    if filter_articles:
+        metadata = metadata[metadata['article_id'].isin(filter_articles)].reset_index(drop=True)
+        emb_mat = emb_mat[metadata.index]  # Subset embeddings too!
 
     # Build FAISS index
     d = emb_mat.shape[1]
@@ -60,6 +67,7 @@ def get_top_k_chunks(query, embeddings_path, metadata_path, top_k=5, use_gpu=Fal
             'score': float(score)
         })
     return chunks
+
 
 
 def call_llm(prompt: str):
@@ -93,15 +101,18 @@ def main():
     parser.add_argument("--metadata_path",   required=True, help=".pkl file of chunk metadata")
     parser.add_argument("--top_k",           type=int, default=5, help="Number of chunks to retrieve and ablate")
     parser.add_argument("--use_gpu",         action='store_true', help="Use FAISS GPU index")
+    parser.add_argument("--filter_articles", type=str, help="Comma-separated article IDs to restrict search (e.g., id1,id2)")
     args = parser.parse_args()
 
+    filter_ids = args.filter_articles.split(",") if args.filter_articles else None
     # Step 1: Retrieve top-K chunks
     chunks = get_top_k_chunks(
         args.query,
         args.embeddings_path,
         args.metadata_path,
         top_k=args.top_k,
-        use_gpu=args.use_gpu
+        use_gpu=args.use_gpu,
+        filter_articles=filter_ids
     )
 
     # Step 2: Full LLM response and embedding

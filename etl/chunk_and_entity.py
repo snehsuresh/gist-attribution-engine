@@ -79,7 +79,7 @@ logger = logging.getLogger("ChunkNERPipeline")
 def split_paragraphs(text):
     if text is None:
         return []
-    return [p.strip() for p in text.split("\n\n") if p.strip()]
+    return [p.strip() + "." for p in text.split(". ") if p.strip()]
 
 split_udf = udf(split_paragraphs, ArrayType(StringType()))
 

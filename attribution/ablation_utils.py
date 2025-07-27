@@ -21,24 +21,37 @@ def embed_text(text: str) -> list:
 
 def build_full_prompt(query: str, chunks: List[Dict]) -> str:
     """
-    Build the full prompt containing all chunks.
+    Build the full prompt with more neutral and selective framing.
     """
-    prompt = f"Answer this query: {query}\nUse these chunks:\n\n"
+    prompt = f"""You are answering a user question using only relevant context below. 
+Ignore any unrelated or unhelpful text.
+
+Question: {query}
+
+Context:
+    """
     for c in chunks:
-        prompt += f"{c['chunk_text']}\n\n"
+        prompt += f"- {c['chunk_text'].strip()}\n"
     return prompt
+
 
 
 def build_ablated_prompt(query: str, chunks: List[Dict], omit_index: int) -> str:
     """
-    Build a prompt omitting the chunk at omit_index.
+    Build prompt without the omitted chunk, keeping framing identical.
     """
-    prompt = f"Answer this query: {query}\nUse these chunks:\n\n"
+    prompt = f"""You are answering a user question using only relevant context below. 
+Ignore any unrelated or unhelpful text.
+
+Question: {query}
+
+Context:
+"""
     for i, c in enumerate(chunks):
-        if i == omit_index:
-            continue
-        prompt += f"{c['chunk_text']}\n\n"
+        if i != omit_index:
+            prompt += f"- {c['chunk_text'].strip()}\n"
     return prompt
+
 
 
 def cosine_drift(e_full, e_ablated) -> float:
