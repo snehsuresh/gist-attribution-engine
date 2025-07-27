@@ -1,10 +1,10 @@
-# 🧠 Semantic Search with DuckDB, FAISS & SentenceTransformers
+# Semantic Search with DuckDB, FAISS & SentenceTransformers
 
 This project implements a fast, modular semantic search system over paragraph-level news articles using **DuckDB**, **SentenceTransformers**, and **FAISS**. It is built for scalable, high-speed search over dense text embeddings and optimized for both experimentation and production search pipelines.
 
 ---
 
-## 📁 Files Overview
+## Files Overview
 
 ### 1. `embed_chunks.py`
 
@@ -57,7 +57,7 @@ A pure-SQL fallback that uses DuckDB to search via cosine distance between a que
 
 ---
 
-## 🔧 Setup Instructions
+## Setup Instructions
 
 Install all dependencies with:
 
@@ -73,7 +73,7 @@ Ensure that `data/processed/duckdb/articles.duckdb` exists and contains the foll
 
 ---
 
-## 🚀 Usage Workflow
+## Usage Workflow
 
 ### Step 1: Embed all article chunks into DuckDB
 
@@ -109,7 +109,7 @@ python vector_search.py --query "trump"
 
 ---
 
-## ⚙️ Data Model (DuckDB Schema)
+##  Data Model (DuckDB Schema)
 
 \*\*Table: \*\*\`\`
 
@@ -129,7 +129,7 @@ python vector_search.py --query "trump"
 
 ---
 
-## 🚅 Speed & Architecture Considerations
+## Speed & Architecture Considerations
 
 ### Architecture Overview:
 
@@ -156,7 +156,7 @@ python vector_search.py --query "trump"
 
 ---
 
-## 📊 Interpreting Cosine Similarity Scores
+## Interpreting Cosine Similarity Scores
 
 Cosine similarity is used to rank results. All embeddings are L2-normalized, so FAISS uses dot-product for cosine similarity.
 
@@ -171,25 +171,25 @@ The **relative ranking** of results is more important than absolute scores.
 
 ---
 
-## 💡 Future Enhancements
+## Future Enhancements
 
-- 🔁 Replace MiniLM with `all-mpnet-base-v2` or `bge-base` for better semantic precision
-- 🎯 Add re-ranking step using `CrossEncoder` to refine top-K
-- ⚡ Switch from `IndexFlatIP` to `IndexIVFFlat` in FAISS for sublinear ANN search
-- 🧩 Integrate DuckDB’s `vector` extension for SQL-native ANN
-- 💾 Persist FAISS index to disk for faster startup and larger corpora
+-  Replace MiniLM with `all-mpnet-base-v2` or `bge-base` for better semantic precision
+-  Add re-ranking step using `CrossEncoder` to refine top-K
+-  Switch from `IndexFlatIP` to `IndexIVFFlat` in FAISS for sublinear ANN search
+-  Integrate DuckDB’s `vector` extension for SQL-native ANN
+-  Persist FAISS index to disk for faster startup and larger corpora
 
 ---
 
-## ✅ Summary
+## Summary
 
 This project is an efficient and production-friendly semantic search stack combining:
 
-- 🧠 **Embeddings** from pretrained transformer models (via SentenceTransformers)
-- 🗃️ **Data storage** using DuckDB for easy ETL and relational joins
-- ⚡ **Vector similarity search** via FAISS for low-latency results
-- 🧱 **Speed-focused architecture** that supports real-time search use cases
-- 🔌 **Modular design** for switching between FAISS and SQL pipelines
+-  **Embeddings** from pretrained transformer models (via SentenceTransformers)
+-  **Data storage** using DuckDB for easy ETL and relational joins
+-  **Vector similarity search** via FAISS for low-latency results
+-  **Speed-focused architecture** that supports real-time search use cases
+-  **Modular design** for switching between FAISS and SQL pipelines
 
 This setup is ideal for building scalable question-answering tools, news recommendation systems, or document retrieval pipelines with strong semantic understanding.
 
