@@ -1,21 +1,21 @@
-# 📊 End-to-End Data Pipeline and Preprocessing Summary
+# Data Pipeline and Preprocessing Summary
 
 This document details the entire journey of our data preparation and enhancement process, from initial ingestion to final output tables used in downstream attribution, retrieval, and summarization systems. The design is inspired by the Gist Attribution architecture (akin to ProRata.ai), but has been significantly enhanced to support fine-grained, entity-aware, session-aware, and feedback-ready processing at scale.
 
 ---
 
-## 🏁 Phase 1: Data Ingestion & Normalization
+## Phase 1: Data Ingestion & Normalization
 
-### 🎯 Objective:
+### Objective:
 
 Establish a unified, queryable foundation of raw content and simulated user behavior that can support document-level and chunk-level downstream analysis.
 
-### ✅ Key Inputs:
+### Key Inputs:
 
 - `articles_export.csv`: Cleaned, deduplicated articles with fields like `id`, `title`, `content`, `published_at`, `tags`
 - Simulated user logs: Views, clicks, and queries aligned with the article topics
 
-### 🔨 What We Did:
+### What We Did:
 
 1. **ETL Setup with PySpark**: We used PySpark to process large volumes of articles and prepare them for chunk-level operations.
 2. **Chunking Articles**: Each article was split into paragraphs (based on `\n\n`) to create granular units of meaning, improving interpretability and attribution.
@@ -28,13 +28,13 @@ Establish a unified, queryable foundation of raw content and simulated user beha
 
 ---
 
-## 🧼 Entity Cleaning & Validation
+##  Entity Cleaning & Validation
 
-### 🎯 Objective:
+###  Objective:
 
 Remove low-quality entities and validate structural assumptions in chunking for clean downstream attribution.
 
-### 🧹 Cleaning Steps:
+###  Cleaning Steps:
 
 - Removed tokens that:
   - Start with `##` (subwords from tokenizer)
@@ -42,7 +42,7 @@ Remove low-quality entities and validate structural assumptions in chunking for 
   - Are only numbers or whitespace
   - Are isolated uppercase letters (e.g. `"A"`, `"XY"`)
 
-### ✅ Validation Metrics:
+###  Validation Metrics:
 
 - **41,041** total chunks
 - **55,421** raw entities extracted
@@ -54,11 +54,11 @@ This confirms the chunking + entity pipeline has integrity and precision.
 
 ---
 
-## ✨ Enhancements Incorporated
+##  Enhancements Incorporated
 
 These features extend beyond ProRata.ai’s typical document-level attribution and make the pipeline more powerful and flexible.
 
-### 1. 📌 Fine-Grained Attribution
+### 1. Fine-Grained Attribution
 
 > Each article is broken down into paragraphs, allowing attribution to be performed at the **chunk level**.
 
@@ -68,7 +68,7 @@ These features extend beyond ProRata.ai’s typical document-level attribution a
 - Enables paragraph-level influence tracking
 - Reduces noise from irrelevant parts of long articles
 
-### 2. 🧠 Entity-Aware Attribution
+### 2. Entity-Aware Attribution
 
 > Named entities like "Ukraine", "NATO", "Trump" are extracted and linked to chunks.
 
@@ -78,7 +78,7 @@ These features extend beyond ProRata.ai’s typical document-level attribution a
 - Supports future **concept-based monetization** or filtering
 - Lets us answer: *"Which entities influenced this LLM answer the most?"*
 
-### 3. 🔁 Session-Aware User Logs
+### 3. Session-Aware User Logs
 
 > Simulated logs now include sessions, queries, and views/clicks across time.
 
@@ -88,7 +88,7 @@ These features extend beyond ProRata.ai’s typical document-level attribution a
 - Enables analysis of influence **across multiple related queries**
 - Vital for attribution algorithms to reflect actual user journeys
 
-### 4. 💬 Feedback Integration
+### 4. Feedback Integration
 
 > The user logs schema supports `feedback_useful`, `feedback_confusing`, etc.
 
@@ -100,7 +100,7 @@ These features extend beyond ProRata.ai’s typical document-level attribution a
 
 ---
 
-## 📦 Output Tables (in DuckDB)
+## Output Tables (in DuckDB)
 
 ### `articles`
 
@@ -140,7 +140,7 @@ Includes views, clicks, and feedback types.
 
 ---
 
-## 🧭 Why This Design Matters
+## Why This Design Matters
 
 This pipeline isn’t just “text-in, summary-out.” It’s designed to:
 
@@ -151,7 +151,7 @@ This pipeline isn’t just “text-in, summary-out.” It’s designed to:
 
 ---
 
-## 📈 Next Steps (Optional)
+## Next Steps (Optional)
 
 - Embed `article_chunks` using Sentence Transformers
 - Perform **chunk-level Top-K vector retrieval**
@@ -161,7 +161,7 @@ This pipeline isn’t just “text-in, summary-out.” It’s designed to:
 
 ---
 
-## 🏁 Conclusion
+## Conclusion
 
 This foundation transforms raw content into a rich, attribution-ready knowledge base. By splitting, tagging, cleaning, and indexing content at a fine-grained level—and simulating real user behavior—we enable far more than document-level attribution. We enable *interpretable, explainable, entity-aware AI*. And that's a meaningful leap beyond existing approaches.
 
