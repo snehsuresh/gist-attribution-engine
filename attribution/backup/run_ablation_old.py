@@ -1,14 +1,4 @@
 #!/usr/bin/env python3
-"""
-python attribution/run_ablation.py \
-  --query "Why did Elon Musk distance himself from Trump’s second administration?" \
-  --embeddings_path data/processed/embeddings/embeddings.npy \
-  --metadata_path data/processed/embeddings/metadata.pkl \
-  --top_k 5 \
-  --scoring_mode drift \
-  --filter_articles lewrockwell_2025-07-14_21,lewrockwell_2025-07-10_30,counterpunch_2025-06-04_36
-"""
-#!/usr/bin/env python3
 import argparse
 import json
 import os
@@ -19,19 +9,23 @@ from ablation_utils import (
     embed_text,
     build_full_prompt,
     build_ablated_prompt,
+    cosine_drift,
     rollup_to_documents,
-    compute_combined_score
 )
 from cache_manager import load_from_cache, save_to_cache
 from openai import OpenAI
-
 client = OpenAI()
 
+"""
+python attribution/run_ablation.py   --query "Why did Elon Musk distance himself from Trump’s second administration?"   --embeddings_path data/processed/embeddings/embeddings.npy   --metadata_path data/processed/embeddings/metadata.pkl   --top_k 5   --filter_articles lewrockwell_2025-07-14_21,lewrockwell_2025-07-10_30,counterpunch_2025-06-04_36
+"""
+
+
+
 def convert(o):
-    if isinstance(o, (np.float32, np.float64)):
+    if isinstance(o, np.float32) or isinstance(o, np.float64):
         return float(o)
     return o
-
 
 def get_top_k_chunks(query, embeddings_path, metadata_path, top_k=5, use_gpu=False, filter_articles=None):
     """
@@ -47,7 +41,7 @@ def get_top_k_chunks(query, embeddings_path, metadata_path, top_k=5, use_gpu=Fal
     # Optional filtering
     if filter_articles:
         metadata = metadata[metadata['article_id'].isin(filter_articles)].reset_index(drop=True)
-        emb_mat = emb_mat[metadata.index]
+        emb_mat = emb_mat[metadata.index]  # Subset embeddings too!
 
     # Build FAISS index
     d = emb_mat.shape[1]
@@ -61,7 +55,7 @@ def get_top_k_chunks(query, embeddings_path, metadata_path, top_k=5, use_gpu=Fal
     q_emb = embed_text(query).astype('float32')
     D, I = index.search(q_emb.reshape(1, -1), top_k)
 
-    # Gather chunk info including FAISS score
+    # Gather chunk info
     chunks = []
     for score, idx in zip(D[0], I[0]):
         row = metadata.iloc[idx]
@@ -70,9 +64,10 @@ def get_top_k_chunks(query, embeddings_path, metadata_path, top_k=5, use_gpu=Fal
             'article_id': row.article_id,
             'chunk_text': row.chunk_text,
             'title': row.title,
-            'faiss_score': float(score)
+            'score': float(score)
         })
     return chunks
+
 
 
 def call_llm(prompt: str):
@@ -81,7 +76,7 @@ def call_llm(prompt: str):
     """
     cached = load_from_cache(prompt)
     if cached:
-        return cached['response'], np.array(cached.get('embedding', []))
+        return cached['response'], np.array(cached['embedding'])
 
     res = client.chat.completions.create(
         model="gpt-3.5-turbo",
@@ -94,25 +89,22 @@ def call_llm(prompt: str):
     text = res.choices[0].message.content.strip()
     emb = embed_text(text)
 
+    # Save to cache
     save_to_cache(prompt, {'response': text, 'embedding': emb.tolist()})
     return text, emb
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run ablation attribution with multiple scoring modes.")
+    parser = argparse.ArgumentParser(description="Run chunk-level and document-level ablation attribution.")
     parser.add_argument("--query",           required=True, help="User query text")
     parser.add_argument("--embeddings_path", required=True, help=".npy file of chunk embeddings")
     parser.add_argument("--metadata_path",   required=True, help=".pkl file of chunk metadata")
     parser.add_argument("--top_k",           type=int, default=5, help="Number of chunks to retrieve and ablate")
     parser.add_argument("--use_gpu",         action='store_true', help="Use FAISS GPU index")
-    parser.add_argument("--filter_articles", type=str, help="Comma-separated article IDs to restrict search")
-    parser.add_argument("--scoring_mode",    choices=['drift','drift_faiss','drift_overlap'], default='drift',
-                        help="Scoring mode: drift, drift_faiss, or drift_overlap")
-    parser.add_argument("--threshold",       type=float, default=0.0, help="Minimum score to include a chunk")
+    parser.add_argument("--filter_articles", type=str, help="Comma-separated article IDs to restrict search (e.g., id1,id2)")
     args = parser.parse_args()
 
     filter_ids = args.filter_articles.split(",") if args.filter_articles else None
-
     # Step 1: Retrieve top-K chunks
     chunks = get_top_k_chunks(
         args.query,
@@ -127,22 +119,13 @@ def main():
     full_prompt = build_full_prompt(args.query, chunks)
     r_full, e_full = call_llm(full_prompt)
 
-    # Step 3: Ablation per chunk with selected scoring
+    # Step 3: Ablation per chunk
     influence = {}
     for idx, chunk in enumerate(chunks):
         ablated_prompt = build_ablated_prompt(args.query, chunks, idx)
         _, e_abl = call_llm(ablated_prompt)
-        drift_score = 1.0 - np.dot(e_full, e_abl) if e_abl.size else 0.0
-        # get final combined score
-        final_score = compute_combined_score(
-            drift=drift_score,
-            faiss_score=chunk['faiss_score'],
-            chunk_text=chunk['chunk_text'],
-            full_response=r_full,
-            mode=args.scoring_mode
-        )
-        # apply threshold
-        influence[chunk['chunk_id']] = final_score if final_score >= args.threshold else 0.0
+        drift = cosine_drift(e_full, e_abl)
+        influence[chunk['chunk_id']] = drift
 
     # Step 4: Normalize chunk-level scores
     total = sum(influence.values()) or 1.0
