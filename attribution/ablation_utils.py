@@ -1,7 +1,9 @@
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 from typing import List, Dict
-
+import numpy as np
+import pandas as pd
+import faiss
 # Initialize the embedding model once
 _model = SentenceTransformer('all-MiniLM-L6-v2')
 
@@ -75,6 +77,41 @@ def compute_combined_score(drift: float,
         return drift + 0.1 * overlap
     # fallback
     return drift
+
+def get_top_k_chunks(query, embeddings_path, metadata_path, top_k=5, use_gpu=False, filter_articles=None):
+    emb_mat = np.load(embeddings_path)
+    if emb_mat.dtype != np.float32:
+        emb_mat = emb_mat.astype('float32')
+
+    metadata = pd.read_pickle(metadata_path)
+    if filter_articles:
+        metadata = metadata[metadata['article_id'].isin(filter_articles)].reset_index(drop=True)
+        emb_mat = emb_mat[metadata.index]
+
+    d = emb_mat.shape[1]
+    index = faiss.IndexFlatIP(d)
+    if use_gpu:
+        res = faiss.StandardGpuResources()
+        index = faiss.index_cpu_to_gpu(res, 0, index)
+    index.add(emb_mat)
+
+    q_emb = embed_text(query).astype('float32')
+    D, I = index.search(q_emb.reshape(1, -1), top_k)
+
+    chunks = []
+    for score, idx in zip(D[0], I[0]):
+        row = metadata.iloc[idx]
+        chunks.append({
+            'chunk_id': row.chunk_id,
+            'article_id': row.article_id,
+            'chunk_text': row.chunk_text,
+            'title': row.title,
+            'source': row.article_id.split("_")[0] if isinstance(row.article_id, str) else "unknown",
+            'faiss_score': float(score)
+        })
+
+
+    return chunks
 
 
 def rollup_to_documents(chunk_scores: Dict[str, float], chunk_to_article: Dict[str, str]) -> Dict[str, float]:

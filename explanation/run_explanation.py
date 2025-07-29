@@ -2,19 +2,42 @@
 import argparse
 import json
 import os
-import pandas as pd
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from time import time
+import pandas as pd
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from explanation_utils import build_explanation_prompt, call_llm_for_explanation
 from utils.helpers import sanitize_filename
 
+def clean_snippet(text):
+    """Normalize whitespace in text snippet."""
+    return ' '.join(text.strip().split())
+
+
+def explain_chunk(chunk, query, full_response):
+    """Build and call LLM prompt for a single chunk, returning its explanation."""
+    prompt = build_explanation_prompt(query, full_response, [chunk])
+    raw = call_llm_for_explanation(prompt)
+    try:
+        explanation = json.loads(raw)
+    except json.JSONDecodeError:
+        try:
+            explanation = json.loads(f"[{raw.strip()}]")
+        except Exception:
+            explanation = []
+    return chunk['chunk_id'], explanation
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate filtered, structured explanations for attributed chunks."
+        description="Generate parallelized explanations for attributed chunks."
     )
     parser.add_argument(
         "--input_path", required=True,
-        help="Path to Phase 3 attribution JSON file"
+        help="Path to attribution JSON file"
     )
     parser.add_argument(
         "--metadata_path", required=True,
@@ -30,51 +53,63 @@ def main():
     )
     args = parser.parse_args()
 
+    start_time = time()
     # Load attribution results
     with open(args.input_path, 'r') as f:
         attribution = json.load(f)
 
-    # Load metadata to map chunk_id -> chunk_text
+    # Load metadata and build chunk->text map
     metadata = pd.read_pickle(args.metadata_path)
-    chunk_text_map = {row.chunk_id: row.chunk_text for _, row in metadata.iterrows()}
+    chunk_text_map = metadata.set_index("chunk_id")["chunk_text"].to_dict()
 
-    # Filter chunks by influence threshold and build list
-    explained_chunks = []
-    for cid, score in attribution['influence_by_chunk'].items():
-        if score >= args.threshold:
-            explained_chunks.append({
-                'chunk_id': cid,
-                'influence': float(score),
-                'text_snippet': chunk_text_map.get(cid, '').strip().replace('\n', ' ')
-            })
+    # Filter chunks by threshold and clean snippet
+    explained_chunks = [
+        {
+            'chunk_id': cid,
+            'influence': float(score),
+            'text_snippet': clean_snippet(chunk_text_map.get(cid, ""))
+        }
+        for cid, score in attribution['influence_by_chunk'].items()
+        if score >= args.threshold
+    ]
 
-    # Build explanation prompt and call LLM
-    prompt = build_explanation_prompt(
-        attribution['query'],
-        attribution['full_response'],
-        explained_chunks
-    )
-    raw = call_llm_for_explanation(prompt)
-    # parse it into a Python list
-    try:
-        explanation_list = json.loads(raw)
-    except json.JSONDecodeError:
-        # fallback: wrap in array if needed
-        explanation_list = json.loads(f"[{raw.strip()}]")
+    print(f"📌 Explaining {len(explained_chunks)} chunks in parallel...")
+
+    query = attribution['query']
+    full_response = attribution['full_response']
+
+    # Parallel explanation calls
+    explanations = {}
+    max_workers = min(len(explained_chunks), os.cpu_count() or len(explained_chunks))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_chunk = {
+            executor.submit(explain_chunk, chunk, query, full_response): chunk
+            for chunk in explained_chunks
+        }
+        for future in as_completed(future_to_chunk):
+            cid, explanation = future.result()
+            explanations[cid] = explanation
+
+    # Convert explanations dict to list to match frontend expectations
+    explanations_list = [
+        {"chunk_id": cid, "explanation": explanations[cid]}
+        for cid in explanations
+    ]
 
     # Save structured output
     os.makedirs(args.output_dir, exist_ok=True)
-    # out_fname = os.path.basename(args.input_path).replace('.json', '_explanation.json')
-    out_fname = sanitize_filename(attribution['query']) + "_explanation.json"
+    out_fname = sanitize_filename(query) + "_explanation.json"
     out_path = os.path.join(args.output_dir, out_fname)
+    output_data = {
+        'query': query,
+        'explained_chunks': explained_chunks,
+        'explanations': explanations_list
+    }
     with open(out_path, 'w') as f:
-        json.dump({
-            'query': attribution['query'],
-            'explained_chunks': explained_chunks,
-            'explanations': explanation_list
-        }, f, indent=2)
-    print(f"✅ Explanation saved to {out_path}")
+        json.dump(output_data, f, indent=2)
 
+    elapsed = time() - start_time
+    print(f"✅ Saved explanations to {out_path} (took {elapsed:.2f}s)")
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

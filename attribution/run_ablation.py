@@ -1,94 +1,41 @@
 #!/usr/bin/env python3
-"""
-python attribution/run_ablation.py \
-  --query "Why did Elon Musk distance himself from Trump’s second administration?" \
-  --embeddings_path data/processed/embeddings/embeddings.npy \
-  --metadata_path data/processed/embeddings/metadata.pkl \
-  --top_k 5 \
-  --scoring_mode drift \
-  --filter_articles lewrockwell_2025-07-14_21,lewrockwell_2025-07-10_30,counterpunch_2025-06-04_36
-"""
-#!/usr/bin/env python3
 import argparse
-import json
 import os
+import json
 import faiss
 import numpy as np
 import pandas as pd
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+import faiss
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Generator, Tuple
 
+# project imports
 from ablation_utils import (
     embed_text,
     build_full_prompt,
     build_ablated_prompt,
     rollup_to_documents,
-    compute_combined_score
+    compute_combined_score,
+    get_top_k_chunks
 )
 from cache_manager import load_from_cache, save_to_cache
 from openai import OpenAI
 from utils.helpers import sanitize_filename
 from dotenv import load_dotenv
-load_dotenv()
 
+load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-def convert(o):
-    if isinstance(o, (np.float32, np.float64)):
-        return float(o)
-    return o
-
-
-def get_top_k_chunks(query, embeddings_path, metadata_path, top_k=5, use_gpu=False, filter_articles=None):
-    """
-    Retrieve the top-K most similar chunks for the given query.
-    Optionally filter by article_id.
-    """
-    emb_mat = np.load(embeddings_path)
-    if emb_mat.dtype != np.float32:
-        emb_mat = emb_mat.astype('float32')
-
-    metadata = pd.read_pickle(metadata_path)
-
-    # Optional filtering
-    if filter_articles:
-        metadata = metadata[metadata['article_id'].isin(filter_articles)].reset_index(drop=True)
-        emb_mat = emb_mat[metadata.index]
-
-    # Build FAISS index
-    d = emb_mat.shape[1]
-    index = faiss.IndexFlatIP(d)
-    if use_gpu:
-        res = faiss.StandardGpuResources()
-        index = faiss.index_cpu_to_gpu(res, 0, index)
-    index.add(emb_mat)
-
-    # Embed query
-    q_emb = embed_text(query).astype('float32')
-    D, I = index.search(q_emb.reshape(1, -1), top_k)
-
-    # Gather chunk info including FAISS score
-    chunks = []
-    for score, idx in zip(D[0], I[0]):
-        row = metadata.iloc[idx]
-        chunks.append({
-            'chunk_id': row.chunk_id,
-            'article_id': row.article_id,
-            'chunk_text': row.chunk_text,
-            'title': row.title,
-            'faiss_score': float(score)
-        })
-    return chunks
-
-
-def call_llm(prompt: str):
-    """
-    Call the LLM (OpenAI) with caching of prompts and embeddings.
-    """
+def call_llm_with_cache(prompt: str) -> Tuple[str, np.ndarray]:
+    """LLM call + caching of both response text and its embedding."""
     cached = load_from_cache(prompt)
     if cached:
-        return cached['response'], np.array(cached.get('embedding', []))
-
+        return (
+            cached["response"],
+            np.array(cached.get("embedding", []), dtype="float32")
+        )
     res = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[
@@ -99,81 +46,162 @@ def call_llm(prompt: str):
     )
     text = res.choices[0].message.content.strip()
     emb = embed_text(text)
-
-    save_to_cache(prompt, {'response': text, 'embedding': emb.tolist()})
+    save_to_cache(prompt, {"response": text, "embedding": emb.tolist()})
     return text, emb
 
-
-def main():
-    parser = argparse.ArgumentParser(description="Run ablation attribution with multiple scoring modes.")
-    parser.add_argument("--query",           required=True, help="User query text")
-    parser.add_argument("--embeddings_path", required=True, help=".npy file of chunk embeddings")
-    parser.add_argument("--metadata_path",   required=True, help=".pkl file of chunk metadata")
-    parser.add_argument("--top_k",           type=int, default=5, help="Number of chunks to retrieve and ablate")
-    parser.add_argument("--use_gpu",         action='store_true', help="Use FAISS GPU index")
-    parser.add_argument("--filter_articles", type=str, help="Comma-separated article IDs to restrict search")
-    parser.add_argument("--scoring_mode",    choices=['drift','drift_faiss','drift_overlap'], default='drift',
-                        help="Scoring mode: drift, drift_faiss, or drift_overlap")
-    parser.add_argument("--threshold",       type=float, default=0.0, help="Minimum score to include a chunk")
-    args = parser.parse_args()
-
-    filter_ids = args.filter_articles.split(",") if args.filter_articles else None
-
-    # Step 1: Retrieve top-K chunks
+def stream_ablation(
+    query: str,
+    embeddings_path: str,
+    metadata_path: str,
+    top_k: int,
+    scoring_mode: str,
+    threshold: float
+) -> Generator[str, None, None]:
+    # 1) fetch top-K
     chunks = get_top_k_chunks(
-        args.query,
-        args.embeddings_path,
-        args.metadata_path,
-        top_k=args.top_k,
-        use_gpu=args.use_gpu,
-        filter_articles=filter_ids
+        query,
+        embeddings_path,
+        metadata_path,
+        top_k=top_k,
+        use_gpu=False,
+        filter_articles=None
     )
 
-    # Step 2: Full LLM response and embedding
-    full_prompt = build_full_prompt(args.query, chunks)
-    r_full, e_full = call_llm(full_prompt)
+    # 2) full response + embedding
+    full_prompt = build_full_prompt(query, chunks)
+    r_full, e_full = call_llm_with_cache(full_prompt)
 
-    # Step 3: Ablation per chunk with selected scoring
+    # stream full response immediately
+    yield json.dumps({
+        "type": "full_response",
+        "data": {"full_response": r_full}
+    }) + "\n"
+
+    # let frontend know title/source for each chunk
+    chunks_info = [
+    {
+        "chunk_index": i,
+        "chunk_id": c["chunk_id"],
+        "title": c.get("title", c["chunk_id"]),
+        "source": c.get("source", "unknown")
+    }
+    for i, c in enumerate(chunks)
+]
+    yield json.dumps({
+        "type": "chunk_info",
+        "data": {"chunks_info": chunks_info}
+    }) + "\n"
+
+    # 3) parallel ablation + explanation per chunk
     influence = {}
-    for idx, chunk in enumerate(chunks):
-        ablated_prompt = build_ablated_prompt(args.query, chunks, idx)
-        _, e_abl = call_llm(ablated_prompt)
+    explanations = {}
+    chunk_to_article = {c["chunk_id"]: c["article_id"] for c in chunks}
+
+    def process_chunk(idx: int, chunk: dict):
+        ablated_prompt = build_ablated_prompt(query, chunks, idx)
+        _, e_abl = call_llm_with_cache(ablated_prompt)
+
         drift_score = 1.0 - np.dot(e_full, e_abl) if e_abl.size else 0.0
-        # get final combined score
         final_score = compute_combined_score(
             drift=drift_score,
-            faiss_score=chunk['faiss_score'],
-            chunk_text=chunk['chunk_text'],
+            faiss_score=chunk["faiss_score"],
+            chunk_text=chunk["chunk_text"],
             full_response=r_full,
-            mode=args.scoring_mode
+            mode=scoring_mode
         )
-        # apply threshold
-        influence[chunk['chunk_id']] = final_score if final_score >= args.threshold else 0.0
 
-    # Step 4: Normalize chunk-level scores
-    total = sum(influence.values()) or 1.0
-    influence_by_chunk = {cid: score/total for cid, score in influence.items()}
+        expl_prompt = (
+            f"Explain how the following chunk influenced the answer:\n\n"
+            f"'{chunk['chunk_text']}'\n\n"
+            f"Full answer:\n'{r_full}'\n\n"
+            "Keep it concise."
+        )
+        explanation, _ = call_llm_with_cache(expl_prompt)
+        snippet = chunk["chunk_text"][:200]
+        return idx, chunk["chunk_id"], float(final_score), explanation, snippet
 
-    # Step 5: Roll up to document-level
-    chunk_to_article = {c['chunk_id']: c['article_id'] for c in chunks}
+    with ThreadPoolExecutor(max_workers=top_k) as executor:
+        futures = {
+            executor.submit(process_chunk, i, c): i
+            for i, c in enumerate(chunks)
+        }
+        for future in as_completed(futures):
+            idx, cid, score, explanation, snippet = future.result()
+            if score < threshold:
+                score = 0.0
+                explanation = ""
+            influence[cid] = score
+            explanations[cid] = explanation
+
+            yield json.dumps({
+                "type": "chunk",
+                "data": {
+                    "index": idx,
+                    "chunk_id": cid,
+                    "influence": score,
+                    "text_snippet": snippet,
+                    "explanation": explanation
+                }
+            }) + "\n"
+
+    # 4) roll up and normalize
+    total_score = sum(influence.values()) or 1.0
+    influence_by_chunk = {cid: sc / total_score for cid, sc in influence.items()}
     influence_by_doc = rollup_to_documents(influence_by_chunk, chunk_to_article)
 
-    # Step 6: Save results
-    out = {
-        'query': args.query,
-        'full_response': r_full,
-        'influence_by_chunk': influence_by_chunk,
-        'influence_by_doc': influence_by_doc
-    }
-    out_dir = 'data/processed/output/attribution_results'
+    # 5) Stream final metrics
+    yield json.dumps({
+        "type": "final_metrics",
+        "data": {
+            "influence_by_chunk": influence_by_chunk,
+            "influence_by_doc": influence_by_doc
+        }
+    }) + "\n"
+
+    # 6) Save output to disk
+    out_dir = "data/processed/output/attribution_results"
     os.makedirs(out_dir, exist_ok=True)
-    # fname = os.path.join(out_dir, f"{args.query.replace(' ', '_')}.json")
-    fname = os.path.join(out_dir, f"{sanitize_filename(args.query)}.json")
+    fname = os.path.join(out_dir, f"{sanitize_filename(query)}.json")
+    with open(fname, "w") as f:
+        json.dump({
+            "query": query,
+            "full_response": r_full,
+            "influence_by_chunk": influence_by_chunk,
+            "influence_by_doc": influence_by_doc,
+            "explanations": explanations,
+            "top_chunks": [c["chunk_id"] for c in chunks]
+        }, f, indent=2)
 
-    with open(fname, 'w') as f:
-        json.dump(out, f, indent=2, default=convert)
+    print(f"✅ Attribution JSON saved to: {fname}", flush=True)
 
-    print(f"✅ Saved attribution results to {fname}")
+    # 7) Signal to frontend that we’re done
+    yield json.dumps({"type": "done"}) + "\n"
 
-if __name__ == '__main__':
+def main():
+    parser = argparse.ArgumentParser(description="Run ablation attribution with optional streaming.")
+    parser.add_argument("--query", required=True, help="User query text")
+    parser.add_argument("--embeddings_path", required=True, help=".npy of chunk embeddings")
+    parser.add_argument("--metadata_path", required=True, help=".pkl of chunk metadata")
+    parser.add_argument("--top_k", type=int, default=5, help="Number of chunks")
+    parser.add_argument("--scoring_mode", choices=["drift", "drift_faiss", "drift_overlap"], default="drift")
+    parser.add_argument("--threshold", type=float, default=0.0)
+    parser.add_argument("--stream", action="store_true", help="Stream JSONL output")
+    args = parser.parse_args()
+
+    if args.stream:
+        for line in stream_ablation(
+            args.query,
+            args.embeddings_path,
+            args.metadata_path,
+            args.top_k,
+            args.scoring_mode,
+            args.threshold
+        ):
+            print(line, end="", flush=True)
+    else:
+        print("⚠️ Non-stream mode is deprecated in this script.")
+        print("Please use the --stream flag.")
+        return
+
+if __name__ == "__main__":
     main()
