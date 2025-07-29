@@ -12,9 +12,9 @@ This phase answers that question using an **ablation loop** — where we remove 
 
 It enables:
 
-- Fine-grained content attribution
-- Human-aligned crediting logic
-- Potential for licensing & feedback systems
+* Fine-grained content attribution
+* Human-aligned crediting logic
+* Potential for licensing & feedback systems
 
 ---
 
@@ -22,16 +22,16 @@ It enables:
 
 ### `attribution/`
 
-- `run_ablation.py` — Main execution script
-- `ablation_utils.py` — Embedding, prompt building, drift scoring
-- `cache_manager.py` — LLM and embedding result caching
-- `attribution_schema.sql` — SQL schema for storing output (optional)
+* `run_ablation.py` — Main execution script
+* `ablation_utils.py` — Embedding, prompt building, drift scoring
+* `cache_manager.py` — LLM and embedding result caching
+* `attribution_schema.sql` — SQL schema for storing output (optional)
 
 ### `data/`
 
-- `processed/embeddings/embeddings.npy` — Vectorized chunk embeddings
-- `processed/embeddings/metadata.pkl` — Metadata (chunk_id, article_id, text, etc.)
-- `processed/output/attribution_results/*.json` — Output files with scores
+* `processed/embeddings/embeddings.npy` — Vectorized chunk embeddings
+* `processed/embeddings/metadata.pkl` — Metadata (chunk\_id, article\_id, text, etc.)
+* `processed/output/attribution_results/*.json` — Output files with scores
 
 ---
 
@@ -39,10 +39,10 @@ It enables:
 
 1. **User query** is embedded
 2. **Top-K chunks** are retrieved using FAISS
-3. Full context is sent to LLM → generates response
+3. Full context is sent to LLM → generates response (streamed token-by-token)
 4. Each chunk is **ablated** (removed one at a time)
 5. New responses are compared using **cosine drift**
-6. Influence scores are computed per chunk
+6. Influence scores are computed per chunk (**in parallel**)
 7. Scores are **normalized and rolled up** to document level
 8. Output saved as `.json` or optionally inserted into DuckDB
 
@@ -58,26 +58,31 @@ python attribution/run_ablation.py \
   --embeddings_path data/processed/embeddings/embeddings.npy \
   --metadata_path data/processed/embeddings/metadata.pkl \
   --top_k 5 \
-  --scoring_mode drift
+  --scoring_mode drift \
+  --stream
 ```
 
 ### What it does:
 
-- Loads Top-K most relevant chunks using FAISS
-- Sends a full prompt to OpenAI's GPT model
-- For each chunk, creates a new prompt without that chunk
-- Calculates embedding drift: `1 - cosine_similarity(full, ablated)`
-- Normalizes and rolls up chunk scores to document-level
-- Writes final attribution result to JSON
+* Loads Top-K most relevant chunks using FAISS
+* Sends a full prompt to OpenAI's GPT model
+* **Streams the first LLM response token-by-token** for immediate frontend feedback
+* For each chunk, creates a new prompt without that chunk
+* **Processes ablations in parallel** using a thread pool
+* Calculates embedding drift: `1 - cosine_similarity(full, ablated)`
+* Normalizes and rolls up chunk scores to document-level
+* Writes final attribution result to JSON
 
 ---
 
 ## `ablation_utils.py`
 
 ### `embed_text(text)`
+
 Uses SentenceTransformer (MiniLM) to generate a normalized embedding for a given string.
 
 ### `build_full_prompt(query, chunks)`
+
 Creates the base prompt with all chunks included:
 
 ```text
@@ -93,27 +98,41 @@ Context:
 ```
 
 ### `build_ablated_prompt(query, chunks, omit_index)`
+
 Same as above, but omits one chunk. This forms the core of the ablation.
 
 ### `cosine_drift(e_full, e_ablated)`
+
 Computes drift = `1 - cosine_similarity()` between full and ablated embeddings.
 
-### `rollup_to_documents(chunk_scores, chunk_to_article)`
-Groups chunk scores by `article_id` and normalizes them to compute document-level attribution.
+### `jaccard_overlap(text1, text2)`
 
-### `compute_combined_score()` (NEW)
+Computes token-level overlap for lexical similarity boost (used in `drift_overlap`).
+
+### `compute_combined_score()`
+
 Supports three scoring modes:
-- `drift`: Pure cosine drift (semantic)
-- `drift_faiss`: Drift × FAISS score (weighted by retrieval strength)
-- `drift_overlap`: Drift + token-level Jaccard overlap (bonus for lexical match)
+
+* `drift`: Pure cosine drift (semantic)
+* `drift_faiss`: Drift × FAISS score (weighted by retrieval strength)
+* `drift_overlap`: Drift + token-level Jaccard overlap (bonus for lexical match)
+
+### `get_top_k_chunks()`
+
+Retrieves top-k semantically similar chunks using FAISS vector search.
+
+### `rollup_to_documents(chunk_scores, chunk_to_article)`
+
+Groups chunk scores by `article_id` and normalizes them to compute document-level attribution.
 
 ---
 
 ## `cache_manager.py`
 
-Avoids repeated LLM and embedding calls by caching them on disk.
-- Uses SHA256 of the prompt as filename
-- Stores both LLM response and its embedding vector
+Avoids repeated LLM and embedding calls by caching them on disk:
+
+* Uses SHA256 of the prompt as filename
+* Stores both LLM response and its embedding vector
 
 ---
 
@@ -138,29 +157,31 @@ We tested the following query using all three scoring modes:
 
 ### Chunk Influence Comparison
 
-| Chunk ID                        | Drift   | Drift × FAISS | Drift + Overlap |
-|--------------------------------|---------|----------------|------------------|
-| lewrockwell_2025-07-14_21_0    | 0.276   | 0.351          | 0.260            |
-| counterpunch_2025-06-04_36_2   | 0.135   | 0.158          | 0.130            |
-| lewrockwell_2025-07-14_21_1    | 0.451   | 0.382          | 0.479            |
-| counterpunch_2025-06-04_36_0   | 0.137   | 0.108          | 0.127            |
-| lewrockwell_2025-07-14_21_3    | 0.000   | 0.000          | 0.003            |
+| Chunk ID                        | Drift | Drift × FAISS | Drift + Overlap |
+| ------------------------------- | ----- | ------------- | --------------- |
+| lewrockwell\_2025-07-14\_21\_0  | 0.276 | 0.351         | 0.260           |
+| counterpunch\_2025-06-04\_36\_2 | 0.135 | 0.158         | 0.130           |
+| lewrockwell\_2025-07-14\_21\_1  | 0.451 | 0.382         | 0.479           |
+| counterpunch\_2025-06-04\_36\_0 | 0.137 | 0.108         | 0.127           |
+| lewrockwell\_2025-07-14\_21\_3  | 0.000 | 0.000         | 0.003           |
 
 ### Interpretation
 
 In this query, `drift` produced the most stable and intuitive attributions:
-- It ranked the most semantically aligned chunk (`21_1`) highest.
-- It did not overvalue chunks with token overlap or FAISS noise.
+
+* It ranked the most semantically aligned chunk (`21_1`) highest.
+* It did not overvalue chunks with token overlap or FAISS noise.
 
 In contrast:
-- `drift_faiss` **dampened** the top drift chunk due to a slightly lower FAISS score.
-- `drift_overlap` **boosted** chunks with keyword matches but lower true influence.
+
+* `drift_faiss` **dampened** the top drift chunk due to a slightly lower FAISS score.
+* `drift_overlap` **boosted** chunks with keyword matches but lower true influence.
 
 ### Why Drift Alone Wins
 
-- Better aligned with actual meaning change in LLM responses
-- Less sensitive to retrieval artifacts
-- More consistent across topics, especially for reasoning-type questions
+* Better aligned with actual meaning change in LLM responses
+* Less sensitive to retrieval artifacts
+* More consistent across topics, especially for reasoning-type questions
 
 Hence, **we recommend `drift` as the default attribution mode**.
 
@@ -189,30 +210,30 @@ Hence, **we recommend `drift` as the default attribution mode**.
 
 ## What Makes This Better Than Contemporaries
 
-| Feature                 | This Engine    | Contemporaries (likely)            |
-|------------------------|----------------|-----------------------------|
-| True LLM Ablation       | ✅ Yes          | ❌ No                        |
-| Semantic Drift Scoring  | ✅ Cosine delta | ❌ Retrieval similarity only |
-| Chunk-level Attribution | ✅              | ❌                           |
-| Document Roll-up        | ✅              | ✅ (document-level only)     |
-| Caching                 | ✅ Prompt-based | ❓                           |
+| Feature                 | This Engine  | Contemporaries (likely)   |
+| ----------------------- | ------------ | ------------------------- |
+| True LLM Ablation       | Yes          | No                        |
+| Semantic Drift Scoring  | Cosine delta | Retrieval similarity only |
+| Chunk-level Attribution | Yes          | No                        |
+| Document Roll-up        | Yes          | Yes (document-level only) |
+| Caching                 | Prompt-based | Unknown                   |
 
 ---
 
 ## Business Impact
 
-- More honest attribution = better trust and explainability
-- Ability to trace output to specific claims, not just documents
-- Can support licensing, feedback, content flagging, and summarization
-- Enables future monetization by showing influence weight per source
+* More honest attribution = better trust and explainability
+* Ability to trace output to specific claims, not just documents
+* Can support licensing, feedback, content flagging, and summarization
+* Enables future monetization by showing influence weight per source
 
 ---
 
 ## Next Steps
 
-- Add entity-level influence scoring
-- Add visual UI overlays per chunk
-- Add token-level or sentence-level ablation
+* Add entity-level influence scoring
+* Add visual UI overlays per chunk
+* Add token-level or sentence-level ablation
 
 Let me know if you'd like the UI or scoring engine connected to this module.
 
