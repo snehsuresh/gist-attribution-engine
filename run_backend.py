@@ -1,15 +1,20 @@
-# run_api.py
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from typing import List, Optional
+from fastapi.responses import StreamingResponse
 import subprocess
 import os
 import sys
 import json
 import pandas as pd
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+project_root = os.path.abspath(os.path.dirname(__file__))
+sys.path.insert(0, project_root) 
+
 from utils.helpers import sanitize_filename
+from attribution.run_ablation import stream_first_response
 
 app = FastAPI(title="Gist Attribution Pipeline API")
 
@@ -32,6 +37,19 @@ async def embed():
         }
     except subprocess.CalledProcessError as e:
         raise HTTPException(status_code=500, detail=f"Embedding failed: {e}")
+
+@app.post("/first_response")
+async def first_response(req: ProcessRequest):
+    """Stream the initial GPT answer token-by-token."""
+    return StreamingResponse(
+        stream_first_response(
+            query=req.query,
+            embeddings_path="data/processed/embeddings.npy",
+            metadata_path="data/processed/metadata.pkl",
+            top_k=req.top_k
+        ),
+        media_type="text/plain"
+    )
 
 @app.post("/process")
 async def process(req: ProcessRequest):

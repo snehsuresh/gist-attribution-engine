@@ -7,12 +7,11 @@ import numpy as np
 import pandas as pd
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-import faiss
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Generator, Tuple
 
 # project imports
-from ablation_utils import (
+from attribution.ablation_utils import (
     embed_text,
     build_full_prompt,
     build_ablated_prompt,
@@ -20,7 +19,7 @@ from ablation_utils import (
     compute_combined_score,
     get_top_k_chunks
 )
-from cache_manager import load_from_cache, save_to_cache
+from attribution.cache_manager import load_from_cache, save_to_cache
 from openai import OpenAI
 from utils.helpers import sanitize_filename
 from dotenv import load_dotenv
@@ -48,6 +47,43 @@ def call_llm_with_cache(prompt: str) -> Tuple[str, np.ndarray]:
     emb = embed_text(text)
     save_to_cache(prompt, {"response": text, "embedding": emb.tolist()})
     return text, emb
+
+
+def stream_first_response(
+    query: str,
+    embeddings_path: str,
+    metadata_path: str,
+    top_k: int = 5
+):
+    """Stream only the first full LLM response token-by-token."""
+    # Fetch top-K chunks for the full prompt
+    chunks = get_top_k_chunks(
+        query,
+        embeddings_path,
+        metadata_path,
+        top_k=top_k,
+        use_gpu=False,
+        filter_articles=None
+    )
+    prompt = build_full_prompt(query, chunks)
+
+    # Enable OpenAI streaming
+    response_stream = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user",   "content": prompt}
+        ],
+        temperature=0,
+        stream=True
+    )
+
+    # Yield tokens as they arrive
+    for chunk in response_stream:
+        token = chunk.choices[0].delta.content
+        if token := chunk.choices[0].delta.content:
+            yield token
+
 
 def stream_ablation(
     query: str,
@@ -79,14 +115,14 @@ def stream_ablation(
 
     # let frontend know title/source for each chunk
     chunks_info = [
-    {
-        "chunk_index": i,
-        "chunk_id": c["chunk_id"],
-        "title": c.get("title", c["chunk_id"]),
-        "source": c.get("source", "unknown")
-    }
-    for i, c in enumerate(chunks)
-]
+        {
+            "chunk_index": i,
+            "chunk_id": c["chunk_id"],
+            "title": c.get("title", c["chunk_id"]),
+            "source": c.get("source", "unknown")
+        }
+        for i, c in enumerate(chunks)
+    ]
     yield json.dumps({
         "type": "chunk_info",
         "data": {"chunks_info": chunks_info}
@@ -176,6 +212,7 @@ def stream_ablation(
 
     # 7) Signal to frontend that we’re done
     yield json.dumps({"type": "done"}) + "\n"
+
 
 def main():
     parser = argparse.ArgumentParser(description="Run ablation attribution with optional streaming.")
