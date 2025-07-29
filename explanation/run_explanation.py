@@ -3,8 +3,10 @@ import argparse
 import json
 import os
 import pandas as pd
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from explanation_utils import build_explanation_prompt, call_llm_for_explanation
-
+from utils.helpers import sanitize_filename
 
 def main():
     parser = argparse.ArgumentParser(
@@ -62,7 +64,8 @@ def main():
 
     # Save structured output
     os.makedirs(args.output_dir, exist_ok=True)
-    out_fname = os.path.basename(args.input_path).replace('.json', '_explanation.json')
+    # out_fname = os.path.basename(args.input_path).replace('.json', '_explanation.json')
+    out_fname = sanitize_filename(attribution['query']) + "_explanation.json"
     out_path = os.path.join(args.output_dir, out_fname)
     with open(out_path, 'w') as f:
         json.dump({

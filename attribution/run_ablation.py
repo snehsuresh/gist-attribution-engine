@@ -15,6 +15,9 @@ import os
 import faiss
 import numpy as np
 import pandas as pd
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from ablation_utils import (
     embed_text,
     build_full_prompt,
@@ -24,8 +27,11 @@ from ablation_utils import (
 )
 from cache_manager import load_from_cache, save_to_cache
 from openai import OpenAI
+from utils.helpers import sanitize_filename
+from dotenv import load_dotenv
+load_dotenv()
 
-client = OpenAI()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def convert(o):
     if isinstance(o, (np.float32, np.float64)):
@@ -161,7 +167,8 @@ def main():
     }
     out_dir = 'data/processed/output/attribution_results'
     os.makedirs(out_dir, exist_ok=True)
-    fname = os.path.join(out_dir, f"{args.query.replace(' ', '_')}.json")
+    # fname = os.path.join(out_dir, f"{args.query.replace(' ', '_')}.json")
+    fname = os.path.join(out_dir, f"{sanitize_filename(args.query)}.json")
 
     with open(fname, 'w') as f:
         json.dump(out, f, indent=2, default=convert)

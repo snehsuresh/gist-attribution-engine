@@ -1,6 +1,6 @@
 plan.txt
 .gitignore
-
+.env
 # Byte-compiled / optimized / DLL files
 
 **pycache**/ _.py[codz] _$py.class

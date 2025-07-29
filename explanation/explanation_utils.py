@@ -2,11 +2,16 @@ import os
 import sys
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from dotenv import load_dotenv
+load_dotenv()
+
 from openai import OpenAI
 from prompt_templates import EXPLANATION_TEMPLATE
 from attribution.cache_manager import load_from_cache, save_to_cache
 
-client = OpenAI()
+
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
 def build_explanation_prompt(query: str, full_response: str, explained_chunks: list) -> str:

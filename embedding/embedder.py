@@ -1,4 +1,4 @@
-# === embed_chunks.py ===
+# === embedder.py ===
 #!/usr/bin/env python3
 """
 embed_chunks.py: Efficiently embed paragraph chunks from DuckDB with batching,
