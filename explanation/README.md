@@ -6,7 +6,7 @@ This document covers **Phase 4** of the Gist Attribution Engine, which generates
 
 ## Objective
 
-> Move beyond numeric attribution scores and explain *why* each chunk mattered.
+> Move beyond numeric attribution scores and explain _why_ each chunk mattered.
 
 This enables:
 
@@ -151,23 +151,9 @@ Each explanation result is saved as:
 
 ## What This Enables
 
-| Feature                      | Benefit                                           |
-| ---------------------------- | ------------------------------------------------- |
-| Chunk-level rationale        | Shows *why* something mattered, not just how much |
-| Structured output            | Easily rendered in UI or dashboards               |
-| Transparent LLM reasoning    | Useful for audits, licensing, review              |
-| Scalable to doc/entity level | Can aggregate later if needed                     |
-
----
-
-## Ready for Frontend or API Integration
-
-- Display top chunks with explanation tooltips
-- Group by article, tag, or topic
-- Export summaries per user query
-- Enable reviewer QA or override interface
-
----
-
-With Phase 4 complete, your system not only ranks what content influenced the LLM — it can now explain *why*.
-
+| Feature | Benefit |
+| --- | --- |
+| Chunk-level rationale | Shows _why_ something mattered, not just how much |
+| Structured output | Easily rendered in UI or dashboards |
+| Transparent LLM reasoning | Useful for audits, licensing, review |
+| Scalable to doc/entity level | Can aggregate later if needed |
