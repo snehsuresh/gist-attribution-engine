@@ -31,7 +31,7 @@ Why?
   - [Explanation Layer](#explanation-layer)
   - [HTTP API](#http-api)
 - [Features](#features)
-- [Architecture] (#Architecture)
+- [Architecture] (#architecture)
 - [Project Structure](#project-structure)
 - [Configuration](#configuration)
 - [Contributing](#contributing)
