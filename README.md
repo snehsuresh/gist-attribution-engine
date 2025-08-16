@@ -23,6 +23,7 @@ Why?
 ## Table of Contents
 
 - [Demo](#demo)
+- [Architecture](#architecture)
 - [Installation](#installation)
 - [Usage](#usage)
   - [ETL & Ingestion](#etl--ingestion)
@@ -31,7 +32,6 @@ Why?
   - [Explanation Layer](#explanation-layer)
   - [HTTP API](#http-api)
 - [Features](#features)
-- [Architecture](#architecture)
 - [Project Structure](#project-structure)
 - [Configuration](#configuration)
 - [Contributing](#contributing)
