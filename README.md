@@ -52,10 +52,6 @@ Why?
 
 ---
 
-## Architecture
-
-![Architecture](assets/architecture.png)
-
 ## Installation
 
 ### 1) Clone
@@ -97,6 +93,12 @@ data/processed/duckdb/articles.duckdb
 data/processed/embeddings.npy
 data/processed/metadata.pkl
 ```
+
+---
+
+## Architecture
+
+![Architecture](assets/architecture.png)
 
 ---
 
@@ -227,87 +229,6 @@ curl -X POST http://localhost:8000/process   -H "Content-Type: application/json"
 - **Explanation layer** that converts scores → human‑readable rationales
 - **FastAPI backend** with streaming and end‑to‑end processing
 - **Frontend‑ready** JSON outputs (chunk/doc/entity rollups, top docs, etc.)
-
----
-
-## Project Structure
-
-```text
-.
-├── assets
-│   ├── demo.mp4
-│   └── duck_to_csv.py
-├── attribution
-│   ├── __init__.py
-│   ├── ablation_utils.py
-│   ├── attribution_scheme.sql
-│   ├── backup
-│   │   ├── ablation_utils_old.py
-│   │   └── run_ablation_old.py
-│   ├── cache_manager.py
-│   ├── README.md
-│   └── run_ablation.py
-├── data
-│   ├── processed
-│   │   ├── articles_export.csv
-│   │   ├── articles_export.xlsx
-│   │   ├── doc_entities_cleaned.parquet
-│   │   └── duckdb
-│   │       └── articles.duckdb
-│   └── raw
-│       ├── logs
-│       └── news
-│           ├── articles_enhanced.csv
-│           ├── mediastack_topics_news_final.csv
-│           ├── mediastack_topics_news.csv
-│           ├── news_api_final.csv
-│           ├── news1.csv
-│           └── wikipedia_articles.csv
-├── embedding
-│   ├── config.json
-│   ├── dump_embeddings.py
-│   ├── embedder.py
-│   ├── fast_vector_search.py
-│   ├── README.md
-│   └── vector_search_duckdb.py
-├── environment.yaml
-├── etl
-│   ├── chunk_and_entity.py
-│   ├── clean_and_validate_entites.py
-│   ├── ingestion
-│   │   ├── media_api_Ing_Clean.py
-│   │   ├── News_paper_Ing_CLean.py
-│   │   └── wiki_source_Ing_Clean.py
-│   ├── load_to_duck.py
-│   ├── normalize_news_to_duckdb.py
-│   ├── README.md
-│   └── userlog_generator.py
-├── explanation
-│   ├── explanation_utils.py
-│   ├── explanation.sql
-│   ├── prompt_templates.py
-│   ├── README.md
-│   └── run_explanation.py
-├── frontend
-│   ├── app.py
-│   ├── logs
-│   │   └── queries.duckdb
-│   └── ui
-│       └── components.py
-├── generate_dir.py
-├── plan.txt
-├── raw_articles.txt
-├── README.md
-├── requirements.txt
-├── run_backend.py
-├── tests
-│   ├── test_embedding.py
-│   └── test_ingestion.py
-└── utils
-    ├── __init__.py
-    ├── duck_to_csv.py
-    └── helpers.py
-```
 
 ---
 
