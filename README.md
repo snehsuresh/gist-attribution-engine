@@ -52,6 +52,10 @@ Why?
 
 ---
 
+## Architecture
+
+![Architecture](assets/architecture.png)
+
 ## Installation
 
 ### 1) Clone
