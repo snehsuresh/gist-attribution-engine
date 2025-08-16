@@ -1,6 +1,6 @@
 # Gist Attribution Engine
 
-> **Fine‑grained, entity‑aware attribution for LLM answers — from ingestion to explanation**
+> **Fine‑grained, entity‑aware attribution for LLM answers - from ingestion to explanation**
 
 [![Build](https://img.shields.io/badge/CI-GitHub%20Actions-blue)](#testing) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#license) [![Python](https://img.shields.io/badge/Python-3.10%2B%20|%203.11%2B-blue)](#installation) [![DuckDB](https://img.shields.io/badge/DB-DuckDB-informational)](https://duckdb.org/) [![FAISS](https://img.shields.io/badge/Vector-FAISS-success)](https://github.com/facebookresearch/faiss) [![SentenceTransformers](https://img.shields.io/badge/Embeddings-SentenceTransformers-5865F2)](https://www.sbert.net/)
 
@@ -100,10 +100,8 @@ data/processed/metadata.pkl
 
 ### ETL & Ingestion
 
-### ETL & Ingestion
-
 Articles are ingested from **Mediastack**, **NewsAPI**, and **Wikipedia**, then normalized to a common schema.  
-We **do not ship data** in this repo — run the ETL locally with your own API keys.
+We **do not ship data** in this repo - run the ETL locally with your own API keys.
 
 Pipeline steps:
 
@@ -151,9 +149,9 @@ python attribution/run_ablation.py   --query "Why is inflation rising?"   --embe
 
 **Scoring modes**
 
-- `drift` — cosine drift between full vs. ablated answers (**recommended default**)
-- `drift_faiss` — drift × retrieval score
-- `drift_overlap` — drift + token Jaccard overlap
+- `drift` - cosine drift between full vs. ablated answers (**recommended default**)
+- `drift_faiss` - drift × retrieval score
+- `drift_overlap` - drift + token Jaccard overlap
 
 > In our evaluations, `drift` produced the most stable, intuitive attributions (less sensitive to retrieval artifacts and keyword noise).
 
@@ -190,9 +188,9 @@ uvicorn run_backend:app --reload --host 0.0.0.0 --port 8000
 
 #### Endpoints
 
-- `POST /embed` — run embedding pipeline and prepare artifacts
-- `POST /first_response` — stream the first GPT answer (token-by-token)
-- `POST /process` — full pipeline: ablation → explanation → metrics
+- `POST /embed` - run embedding pipeline and prepare artifacts
+- `POST /first_response` - stream the first GPT answer (token-by-token)
+- `POST /process` - full pipeline: ablation → explanation → metrics
 
 **Examples**
 
@@ -315,11 +313,11 @@ Configure via **environment variables** or small JSON files.
 
 **Environment variables**
 
-- `OPENAI_API_KEY` — required for LLM calls in attribution/explanation
-- `EMBEDDING_MODEL` — SentenceTransformers model (default: `all-MiniLM-L6-v2`)
-- `DUCKDB_PATH` — path to DuckDB file (default: `data/processed/duckdb/articles.duckdb`)
-- `FAISS_USE_GPU` — set to `1` to use FAISS-GPU if installed
-- `ABLATION_SCORING_MODE` — `drift` | `drift_faiss` | `drift_overlap`
+- `OPENAI_API_KEY` - required for LLM calls in attribution/explanation
+- `EMBEDDING_MODEL` - SentenceTransformers model (default: `all-MiniLM-L6-v2`)
+- `DUCKDB_PATH` - path to DuckDB file (default: `data/processed/duckdb/articles.duckdb`)
+- `FAISS_USE_GPU` - set to `1` to use FAISS-GPU if installed
+- `ABLATION_SCORING_MODE` - `drift` | `drift_faiss` | `drift_overlap`
 
 **Embedding/config**
 
@@ -381,7 +379,7 @@ uvicorn run_backend:app --host 0.0.0.0 --port 8000
 
 **Notes**
 
-- Keep `OPENAI_API_KEY` in secrets (env vars) — never commit keys
+- Keep `OPENAI_API_KEY` in secrets (env vars) - never commit keys
 - Mount or provision persistent storage for `DuckDB` and outputs
 - Consider a reverse proxy (nginx) and enable CORS if serving a web UI
 - For GPU FAISS, deploy on CUDA-capable nodes
@@ -429,7 +427,7 @@ in the Software without restriction...
 
 ## Acknowledgments & Credits
 
-- **ProRata.ai** — conceptual inspiration for attribution‑first thinking
+- **ProRata.ai** - conceptual inspiration for attribution‑first thinking
 - **SentenceTransformers** for easy, high‑quality embeddings
 - **FAISS** for production‑grade vector search
 - **DuckDB** for fast analytical storage
