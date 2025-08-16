@@ -100,20 +100,25 @@ data/processed/metadata.pkl
 
 ### ETL & Ingestion
 
-Process raw articles, split into paragraph chunks, and extract entities with Hugging Face NER.
+### ETL & Ingestion
+
+Articles are ingested from **Mediastack**, **NewsAPI**, and **Wikipedia**, then normalized to a common schema.  
+We **do not ship data** in this repo — run the ETL locally with your own API keys.
+
+Pipeline steps:
+
+1. Fetch & clean articles → `mediastack_topics_news.csv`, `news_api_final.csv`, `wikipedia_articles.csv`
+2. Split into paragraphs and run **NER** with Hugging Face (via PySpark)
+3. Clean noisy entities and validate chunk structure
+4. Load results into **DuckDB** (`articles`, `article_chunks`, `doc_entities`, `doc_entities_cleaned`, `user_events`)
+
+Run in order:
 
 ```bash
-# Ingest + normalize to DuckDB (examples; adjust to your paths)
-python etl/ingestion/media_api_Ing_Clean.py
-python etl/ingestion/News_paper_Ing_CLean.py
-python etl/ingestion/wiki_source_Ing_Clean.py
-
-# Chunk + entity extraction
+python etl/ingestion/*.py
 python etl/chunk_and_entity.py
 python etl/clean_and_validate_entites.py
-
-# Optionally load or export
-python etl/load_to_duck.py
+python etl/load_to_duck.py # only if needed
 ```
 
 **Entity Cleaning & Validation (results):**
